@@ -1,0 +1,230 @@
+---
+title: "Untitled"
+output: html_document
+date: "2023-11-22"
+---
+pacman::p_load(evomap, ape, phytools, geiger, phylobase, adephylo,phangorn)
+library(evomap)
+library(ape)
+library(taxize)
+library(nlme)
+
+cor <- gnr_resolve(data$species, best_match_only = TRUE)
+
+```{r}
+data <- read.table("Book9.txt",header=T,sep="\t",row.names=1,fileEncoding = "UTF16LE")
+dataC<-cbind(data,rownames(data))
+data <- read.table("data3.txt",header=T,sep="\t",row.names=1)
+dataT<-cbind(data,rownames(data))
+data<-merge(dataC,dataT,by="rownames(data)")
+rownames(data)<-data[,1]
+data<-data[,-1]
+
+tree <- read.newick("Mammalia_species.nwk")
+tree <- treedata(tree, data, sort=T, warnings=T)$phy
+data <- treedata(tree,data,sort=T,warnings=T)$data
+name.check(tree,data)
+plot(tree, type = "fan", label.offset=3, cex=0.6)
+nodelabels(bg="white",cex=0.4,frame="circle")
+
+plot(mass~brain,data=data,pch=21,bg="gray",cex=1.2,log="xy",las=1,cex.axis=0.7,
+     cex.lab=0.9,bty="n")
+data<- as.data.frame(data)
+fit.ols <- lm(log(mass)~log(brain),data=data)
+fit.ols
+summary(fit.ols)
+lines(data$brain,exp(predict(fit.ols)),lwd=2,col="red")
+
+plot(mass~HomeRange,data=data,pch=21,bg="gray",cex=1.2,log="xy",las=1,cex.axis=0.7,
+     cex.lab=0.9,bty="n")
+fit.ols <- lm(log(mass)~log(HomeRange),data=data)
+fit.ols
+summary(fit.ols)
+lines(data$HomeRange,exp(predict(fit.ols)),lwd=2,col="red")
+
+mass <- setNames(data[,"mass"], rownames(data))
+brain <- setNames(data[,"brain"],   rownames(data))
+hr <- setNames(data[,"HomeRange"],   rownames(data))
+spp<-rownames(data)
+
+pic.mass <- pic(log(mass),tree)
+pic.brain <- pic(log(brain),tree)
+pic.hr <- pic(log(hr),tree)
+
+fit.pic<-lm(pic.mass~pic.brain+0)
+fit.pic
+summary(fit.pic)
+plot(pic.mass~pic.brain,
+     xlab="PICs for log(brain)",
+     ylab="PICs for log(mass)",
+     pch=21,bg="gray",cex=1.2,las=1,
+     cex.axis=0.7,cex.lab=0.9,bty="n")
+abline(fit.pic,lwd=2,col="red")
+
+fit.pic2<-lm(pic.brain~pic.hr+0)
+fit.pic2
+summary(fit.pic2)
+plot(pic.brain~pic.hr,
+     xlab="PICs for log(brain)",
+     ylab="PICs for log(home range km2)",
+     pch=21,bg="gray",cex=1.2,las=1,
+     cex.axis=0.7,cex.lab=0.9,bty="n")
+abline(fit.pic2,lwd=2,col="red")
+```
+
+```{r}
+corBM<-corBrownian(phy=tree,form=~spp)
+corBM
+pgls.mb <- gls(log(mass)~log(brain),data=data,correlation=corBM)
+summary(pgls.mb)
+coef(fit.pic)
+coef(pgls.mb)
+abs(coef(fit.pic)[1]-coef(pgls.mb)[2])
+summary(fit.pic)$coefficients[1,4]
+summary(pgls.mb)$tTable[2,4]
+```
+
+```{r}
+corBM<-corBrownian(phy=tree,form=~spp)
+corBM
+pgls.hrb <- gls(log(brain)~log(hr),data=data,correlation=corBM)
+summary(pgls.hrb)
+coef(fit.pic2)
+coef(pgls.hrb)
+abs(coef(fit.pic2)[1]-coef(pgls.hrb)[2])
+summary(fit.pic2)$coefficients[1,4]
+summary(pgls.hrb)$tTable[2,4]
+```
+
+```{r}
+corLambda<-corPagel(value=1,phy=tree,form=~spp)
+corLambda
+pgls.Lambda<-gls(log(mass)~log(brain),
+                 data=data,correlation=corLambda)
+summary(pgls.Lambda)
+
+corLambda<-corPagel(value=1,phy=tree,form=~spp)
+corLambda
+pgls.Lambda<-gls(log(hr)~log(brain),
+                 data=data,correlation=corLambda)
+summary(pgls.Lambda)
+
+pca<-phyl.pca(tree,data)
+print(pca)
+```
+
+```{r}
+fitBM_m <- fitContinuous(tree,mass)
+fitBM_m
+fitBM_b <- fitContinuous(tree,brain)
+fitBM_b
+fitBM_hr <- fitContinuous(tree,hr)
+fitBM_hr
+
+fitEB_m <- fitContinuous(tree,mass,
+                        model="EB")
+fitEB_m
+fitEB_b <- fitContinuous(tree,brain,
+                        model="EB")
+fitEB_b
+fitEB_hr <- fitContinuous(tree,hr,
+                        model="EB")
+fitEB_hr
+
+fitOU_m <- fitContinuous(tree,mass,
+                        model="OU")
+fitOU_m
+fitOU_b <- fitContinuous(tree,brain,
+                        model="OU")
+fitOU_b
+fitOU_hr <- fitContinuous(tree,hr,
+                        model="OU")
+fitOU_hr
+aic_m <- setNames(c(AIC(fitBM_m),
+                   AIC(fitEB_m),
+                   AIC(fitOU_m)),
+                 c("BM","EB","OU"))
+aic_m
+aic.w(aic_m)
+
+aic_b <- setNames(c(AIC(fitBM_b),
+                   AIC(fitEB_b),AIC(fitOU_b)),
+                 c("BM","EB","OU"))
+
+aic_b
+aic.w(aic_b)
+
+aic_hr <- setNames(c(AIC(fitBM_hr),
+                   AIC(fitEB_hr),AIC(fitOU_hr)),
+                 c("BM","EB","OU"))
+
+aic_hr
+aic.w(aic_hr)
+```
+
+```{r}
+K_mass<-phylosig(tree, mass, test=TRUE, nsim=10000)
+K_mass
+par(cex=0.8,mar=c(5.1,4.1,2.1,2.1))
+plot(K_mass,las=1,cex.axis=0.9)
+
+nullX<-fastBM(tree,nsim=10000)
+nullK<-apply(nullX,2,phylosig,tree=tree)
+Pval_mass<-mean(nullK<=K_mass$K)
+Pval_mass
+
+hist(c(nullK,K_mass$K),breaks=30,col="lightgray",
+     border="lightgray",main="",xlab="K",las=1,
+     cex.axis=0.7,cex.lab=0.9,ylim=c(0,4000))
+arrows(x0=K_mass$K,y0=par()$usr[4],y1=0,length=0.12,
+       col=make.transparent("blue",0.5),lwd=2)
+text(K_mass$K,0.96*par()$usr[4],
+     paste("observed value of K (P = ",
+           round(Pval_mass,4),")",sep=""),
+     pos=4,cex=0.8)
+mtext("(a)",line=1,adj=0)
+
+K_brain<-phylosig(tree, brain, test=TRUE, nsim=10000)
+K_brain
+par(cex=0.8,mar=c(5.1,4.1,2.1,2.1))
+plot(K_brain,las=1,cex.axis=0.9)
+
+nullX<-fastBM(tree,nsim=10000)
+nullK<-apply(nullX,2,phylosig,tree=tree)
+Pval_brain<-mean(nullK<=K_brain$K)
+Pval_brain
+
+hist(c(nullK,K_brain$K),breaks=30,col="lightgray",
+     border="lightgray",main="",xlab="K",las=1,
+     cex.axis=0.7,cex.lab=0.9,ylim=c(0,4000))
+arrows(x0=K_brain$K,y0=par()$usr[4],y1=0,length=0.12,
+       col=make.transparent("blue",0.5),lwd=2)
+text(K_brain$K,0.96*par()$usr[4],
+     paste("observed value of K (P = ",
+           round(Pval_brain,4),")",sep=""),
+     pos=4,cex=0.8)
+mtext("(a)",line=1,adj=0)
+
+K_hr<-phylosig(tree, hr, test=TRUE, nsim=10000)
+K_hr
+par(cex=0.8,mar=c(5.1,4.1,2.1,2.1))
+plot(K_hr,las=1,cex.axis=0.9)
+
+nullX<-fastBM(tree,nsim=10000)
+nullK<-apply(nullX,2,phylosig,tree=tree)
+Pval_hr<-mean(nullK<=K_hr$K)
+Pval_hr
+
+hist(c(nullK,K_hr$K),breaks=30,col="lightgray",
+     border="lightgray",main="",xlab="K",las=1,
+     cex.axis=0.7,cex.lab=0.9,ylim=c(0,4000))
+arrows(x0=K_hr$K,y0=par()$usr[4],y1=0,length=0.12,
+       col=make.transparent("blue",0.5),lwd=2)
+text(K_hr$K,0.96*par()$usr[4],
+     paste("observed value of K (P = ",
+           round(Pval_hr,4),")",sep=""),
+     pos=4,cex=0.8)
+mtext("(a)",line=1,adj=0)
+```
+
+
